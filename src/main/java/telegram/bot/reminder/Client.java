@@ -2,10 +2,11 @@ package telegram.bot.reminder;
 
 import telegram.bot.reminder.enums.Stage;
 
+import java.io.Serializable;
 import java.util.Date;
 import java.util.HashMap;
 
-public class Client {
+public class Client implements Serializable {
 
     private Stage stage;
     private HashMap<Date,String> Reminders = new HashMap<>();

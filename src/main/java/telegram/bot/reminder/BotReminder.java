@@ -1,8 +1,10 @@
 package telegram.bot.reminder;
 
-import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
-import org.springframework.stereotype.Component;
+import com.hazelcast.core.IMap;
+import com.hazelcast.core.ReplicatedMap;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Message;
@@ -13,17 +15,13 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.Keyboard
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import telegram.bot.reminder.enums.Stage;
 
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-@Component
+@Service
 public class BotReminder extends TelegramLongPollingBot {
 
-    private static HazelcastInstance hzInstance = Hazelcast.newHazelcastInstance();
-    private static Map<Long, Client> chatIdAndWorkStage = new HashMap<>();//hzInstance.getMap("data");
     private static ExecutorService executorService = Executors.newWorkStealingPool();
 
     public void sendMessage (Message message) {
@@ -74,7 +72,10 @@ public class BotReminder extends TelegramLongPollingBot {
             } else {
                 Client client = new Client(chatId);
                 client.setStage(Stage.WAIT);
-                chatIdAndWorkStage.put(chatId, client);
+                System.out.println("POINT1");
+                //chatIdAndWorkStage.put(chatId, client);
+                putClient(chatId, client);
+                System.out.println("POINT2");
                 return client;
             }
         }
@@ -103,10 +104,6 @@ public class BotReminder extends TelegramLongPollingBot {
         replyKeyboardMarkup.setKeyboard(keyboardRows);
     }
 
-    public void work() {
-
-    }
-
     @Override
     public void onUpdateReceived(Update update) {
         Message message = update.getMessage();
@@ -127,44 +124,15 @@ public class BotReminder extends TelegramLongPollingBot {
         return "1069727783:AAHWiu6g8ogvkCW2EtdMzKvZQf_qeA-Gu-c";
     }
 
-    {
-        new Thread(() -> {
-            while (true) {
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                synchronized (chatIdAndWorkStage) {
-                    for (Client client : chatIdAndWorkStage.values()) {
-                            SimpleDateFormat format = new SimpleDateFormat("yyyy.MM.dd HH:mm");
-                            Date dateNow = null;
-                            try {
-                                dateNow = format.parse(format.format(new Date()));
-                            } catch (ParseException e) {
-                                e.printStackTrace();
-                            }
-                            for (Date date : client.getReminders().keySet()) {
-                                if ((date.equals(dateNow)) || (date.before(dateNow))) {
-                                    executorService.submit(() -> {
-                                        SendMessage sendMessage = new SendMessage();
-                                        sendMessage.enableMarkdown(true);
-                                        sendMessage.setChatId(client.getChatId());
-                                        sendMessage.setText(client.getReminders().get(date));
-                                        synchronized (client.getReminders()) {
-                                            client.getReminders().remove(date);
-                                        }
-                                        try {
-                                            execute(sendMessage);
-                                        } catch (TelegramApiException e) {
-                                            e.printStackTrace();
-                                        }
-                                    });
-                                }
-                            }
-                    }
-                }
-            }
-        }).start();
+    final HazelcastInstance hazelcastInstance;
+    public static ReplicatedMap<Long, Client> chatIdAndWorkStage;
+    public BotReminder(@Qualifier("hazelcastInstance") HazelcastInstance hazelcastInstance) {
+        this.hazelcastInstance = hazelcastInstance;
+        this.chatIdAndWorkStage = hazelcastInstance.getReplicatedMap("chatIdAndWorkStage");
+    }
+
+    private void putClient(Long chatId, Client client) {
+        chatIdAndWorkStage.put(chatId, client);
+        //hazelcastInstance.<Long, Client>getTopic("productAdd").publish(chatId, client);
     }
 }
