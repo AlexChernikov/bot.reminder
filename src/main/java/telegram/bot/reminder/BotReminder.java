@@ -1,7 +1,6 @@
 package telegram.bot.reminder;
 
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.core.IMap;
 import com.hazelcast.core.ReplicatedMap;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
